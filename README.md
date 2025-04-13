@@ -1,5 +1,7 @@
 # Map Vibe Template - Web
 
+![Screenshot 2025-04-13 at 11 03 59 AM](https://github.com/user-attachments/assets/bdea5752-5bcf-4fa6-b12b-6d3e3bbbe00a)
+
 Context and examples for "vibe coding" with Google Maps Platform (GMP) on the web using Large Language Models (LLMs).
 
 ## Overview

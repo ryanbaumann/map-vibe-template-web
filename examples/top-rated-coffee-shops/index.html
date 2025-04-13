@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Top 5 Coffee Shops near Moscone Center</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <style>
+        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }
+        #map-container { height: 100%; width: 100%; position: relative; }
+        #map { height: 100%; width: 100%; background-color: #e5e7eb; }
+        .sidebar-content::-webkit-scrollbar { width: 6px; }
+        .sidebar-content::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,0.2); border-radius: 3px; }
+        #details-panel { position: absolute; top: 1rem; right: 1rem; background: white; border-radius: 0.5rem; box-shadow: 0 2px 10px rgba(0,0,0,0.1); z-index: 20; max-width: 350px; max-height: calc(100vh - 2rem); display: none; flex-direction: column; }
+        #details-panel .panel-header { padding: 0.5rem 0.75rem; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+        #details-panel .panel-header h3 { font-size: 0.9rem; font-weight: 600; margin: 0; }
+        #details-panel .close-button { background: none; border: none; font-size: 1.2rem; cursor: pointer; padding: 0.25rem; line-height: 1; }
+        #details-panel .panel-content { padding: 0; overflow-y: auto; flex-grow: 1; }
+        gmp-place-details { display: block; width: 100%; }
+        .list-item { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid #e0e0e0; cursor: pointer; transition: background-color 0.15s ease-in-out; }
+        .list-item:hover { background-color: #f5f5f5; }
+        .list-item.selected { background-color: #e8f0fe; border-left: 4px solid #1967d2; padding-left: 12px; }
+        .list-item .rank { font-size: 0.9rem; font-weight: 500; color: #1967d2; width: 24px; text-align: center; margin-right: 16px; }
+        .list-item .content { flex: 1; }
+        .list-item .name { font-size: 0.95rem; font-weight: 500; color: #202124; margin-bottom: 2px; }
+        .list-item .details { font-size: 0.8rem; color: #5f6368; display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+        .list-item .details svg { width: 14px; height: 14px; fill: #fbbc04; }
+        .list-item .address { font-size: 0.8rem; color: #5f6368; }
+        .shop-marker-tag { background-color: #1A73E8; color: white; padding: 5px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: 500; box-shadow: 0 1px 3px rgba(0,0,0,0.2); white-space: nowrap; }
+    </style>
+    <script>
+      (g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await(a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t.toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=`https://maps.${c}apis.com/maps/api/js?`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})({
+        key: "YOUR_API_KEY", v: "alpha", map_ids: "YOUR_MAP_ID"
+      });
+    </script>
+</head>
+<body class="relative h-screen overflow-hidden antialiased text-gray-800">
+    <div id="map-container" class="absolute inset-0 z-0">
+       <div id="map"></div>
+    </div>
+    <aside id="sidebar" class="absolute top-3 left-3 w-80 max-w-[calc(100%-1.5rem)] bg-white rounded-lg shadow-lg z-10 flex flex-col overflow-hidden md:bottom-auto md:max-h-[calc(100%-2rem)] max-md:bottom-0 max-md:left-0 max-md:right-0 max-md:top-auto max-md:w-full max-md:max-w-full max-md:max-h-[40vh] max-md:rounded-none max-md:rounded-t-lg max-md:border-t">
+        <div class="p-3 border-b flex-shrink-0">
+            <h2 id="sidebar-title" class="text-lg font-semibold">Top 5 Coffee Shops</h2>
+            <p id="sidebar-subtitle" class="text-xs text-gray-500">Near Moscone Center</p>
+        </div>
+        <div class="sidebar-content flex-grow overflow-y-auto">
+            <div id="loading-indicator" class="p-3 text-xs text-blue-600 italic hidden flex items-center gap-2">
+                <svg class="animate-spin h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"> <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle> <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path> </svg>
+                <span id="loading-text">Loading...</span>
+            </div>
+            <div id="error-message" class="p-3 text-xs text-red-600 font-medium"></div>
+             <div id="results-list" class="text-sm"></div>
+        </div>
+    </aside>
+    <div id="details-panel">
+        <div class="panel-header">
+            <h3>Place Details</h3>
+            <button class="close-button" onclick="hidePlaceDetailsPanel()">×</button>
+        </div>
+        <div class="panel-content">
+            <gmp-place-details size="medium" id="place-details-widget"></gmp-place-details>
+        </div>
+    </div>
+    <script type="module">
+      let mapInstance, geocoder, searchOriginMarker;
+      let GoogleMap, AdvancedMarkerElement, PinElement, PlaceDetailsElement, Geocoder, LatLngBounds;
+      let activeMarkers = new Map();
+      let searchOrigin = null;
+      let placeDetailsWidget;
+      const apiKey = "YOUR_API_KEY";
+      const mapId = "YOUR_MAP_ID";
+      const defaultSearchAddress = "Moscone Center, San Francisco, CA";
+      const searchRadiusMeters = 1500;
+      const placeTypeQuery = "coffee shop";
+
+      let mapDiv, sidebarTitle, sidebarSubtitle, loadingIndicator, loadingText, errorMessageDiv, resultsListDiv, detailsPanel;
+
+      function showLoading(isLoading, text = "Loading...") {
+          if (!loadingIndicator || !loadingText) return;
+          loadingText.textContent = text;
+          loadingIndicator.style.display = isLoading ? 'flex' : 'none';
+          if (isLoading) showError('');
+      }
+      function showError(message) {
+          if (!errorMessageDiv) return;
+          errorMessageDiv.textContent = message || '';
+          errorMessageDiv.style.display = message ? 'block' : 'none';
+      }
+      function apiToJsCoords(apiCoords) {
+          return apiCoords ? { lat: apiCoords.latitude, lng: apiCoords.longitude } : null;
+      }
+
+      async function init() {
+        try {
+          await loadServicesAndComponents();
+          getDomElements();
+
+          showLoading(true, `Finding "${defaultSearchAddress}"...`);
+          const initialLocationResult = await geocodeSearchCenter(defaultSearchAddress);
+          let initialCenter, initialName;
+          if (initialLocationResult?.geometry?.location) {
+              initialCenter = initialLocationResult.geometry.location;
+              initialName = initialLocationResult.formatted_address || defaultSearchAddress;
+              searchOrigin = { location: initialCenter, placeId: initialLocationResult.place_id, name: initialName };
+          } else {
+              showError(`Could not find initial location: "${defaultSearchAddress}". Defaulting to SF.`);
+              initialCenter = { lat: 37.783, lng: -122.403 };
+              initialName = "San Francisco";
+              updateSidebarTitle(initialName);
+          }
+          showLoading(false);
+
+          init2DMap(initialCenter);
+          setupPlaceDetailsWidget();
+
+          if (searchOrigin) {
+              addSearchOriginMarker(searchOrigin.location, searchOrigin.name);
+              updateSidebarTitle(searchOrigin.name);
+              await findAndDisplayPlaces(searchOrigin.location, searchOrigin.name);
+          }
+
+        } catch (error) {
+          console.error("Initialization failed:", error);
+          showError(`Map initialization failed: ${error.message}. Check API key/Map ID or network connection.`);
+          showLoading(false);
+        }
+      }
+
+      async function loadServicesAndComponents() {
+        showLoading(true, "Loading services...");
+        try {
+            const [mapsLib, markerLib, placesLib, coreLib, geocodingLib] = await Promise.all([
+                google.maps.importLibrary("maps"),
+                google.maps.importLibrary("marker"),
+                google.maps.importLibrary("places"),
+                google.maps.importLibrary("core"),
+                google.maps.importLibrary("geocoding")
+            ]);
+            GoogleMap = mapsLib.Map;
+            AdvancedMarkerElement = markerLib.AdvancedMarkerElement;
+            PinElement = markerLib.PinElement;
+            PlaceDetailsElement = placesLib.PlaceDetailsElement;
+            Geocoder = geocodingLib.Geocoder;
+            LatLngBounds = coreLib.LatLngBounds;
+            geocoder = new Geocoder();
+        } catch (error) {
+            console.error("Failed to load Google Maps libraries:", error);
+            showError(`Failed to load services: ${error.message}`);
+            throw error;
+        } finally {
+            showLoading(false);
+        }
+      }
+
+      function getDomElements() {
+          mapDiv = document.getElementById('map');
+          sidebarTitle = document.getElementById('sidebar-title');
+          sidebarSubtitle = document.getElementById('sidebar-subtitle');
+          loadingIndicator = document.getElementById('loading-indicator');
+          loadingText = document.getElementById('loading-text');
+          errorMessageDiv = document.getElementById('error-message');
+          resultsListDiv = document.getElementById('results-list');
+          detailsPanel = document.getElementById('details-panel');
+          if (!mapDiv || !resultsListDiv || !detailsPanel || !sidebarTitle || !sidebarSubtitle) {
+              throw new Error("One or more essential HTML elements are missing.");
+          }
+      }
+
+      function init2DMap(centerCoords) {
+        if (!GoogleMap || !mapId || !mapDiv) throw new Error("Map components or container not ready.");
+        mapInstance = new GoogleMap(mapDiv, {
+            center: centerCoords,
+            zoom: 15,
+            mapId: mapId,
+            gestureHandling: "greedy",
+            disableDefaultUI: true,
+            zoomControl: true,
+        });
+        mapInstance.addListener('click', (e) => {
+            if (!e.placeId) {
+                hidePlaceDetailsPanel();
+            }
+        });
+      }
+
+      function setupPlaceDetailsWidget() {
+          placeDetailsWidget = document.getElementById('place-details-widget');
+          if (!placeDetailsWidget) {
+              console.error("Place Details Widget element not found!");
+          }
+      }
+
+      async function geocodeSearchCenter(address) {
+        if (!geocoder) { showError("Geocoding service unavailable."); return null; }
+        try {
+            const { results } = await geocoder.geocode({ address: address });
+            return results?.[0] ?? null;
+        } catch (e) {
+            console.error("Geocode failed:", e);
+            showError(`Geocoding error: ${e.message}`);
+            return null;
+        }
+      }
+
+      async function findAndDisplayPlaces(centerLocation, locationName = "selected area") {
+        showLoading(true, `Searching for ${placeTypeQuery} near ${locationName}...`);
+        resultsListDiv.innerHTML = '';
+        clearMarkers();
+        hidePlaceDetailsPanel();
+
+        const places = await searchNearbyPlaces(centerLocation.toJSON(), searchRadiusMeters, placeTypeQuery);
+
+        if (!places || places.length === 0) {
+          showError(`No ${placeTypeQuery} found near ${locationName}.`);
+          resultsListDiv.innerHTML = '<p class="text-gray-500 p-4">No results found.</p>';
+          showLoading(false);
+          return;
+        }
+
+        const topRatedPlaces = places
+          .filter(p => p.rating && p.rating >= 4.0 && p.userRatingCount && p.userRatingCount >= 10)
+          .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+          .slice(0, 5);
+
+        if (topRatedPlaces.length === 0) {
+            showError(`Found ${placeTypeQuery} near ${locationName}, but none met the rating/review criteria (>= 4.0 stars, >= 10 reviews).`);
+            resultsListDiv.innerHTML = '<p class="text-gray-500 p-4">No highly-rated places found matching criteria.</p>';
+            showLoading(false);
+            return;
+        }
+
+        if (!AdvancedMarkerElement || !LatLngBounds || !mapInstance) {
+            showError("Marker, Bounds class or Map instance not loaded.");
+            showLoading(false);
+            return;
+        }
+
+        const bounds = new LatLngBounds();
+        if (searchOriginMarker?.position) bounds.extend(searchOriginMarker.position);
+
+        topRatedPlaces.forEach((place, index) => {
+          const position = apiToJsCoords(place.location);
+          if (!position) return;
+          const marker = addPlaceMarker(position, place);
+          if (marker) {
+              activeMarkers.set(place.id, marker);
+              bounds.extend(position);
+              const listItem = createListItem(place, index + 1);
+              resultsListDiv.appendChild(listItem);
+          }
+        });
+
+        if (!bounds.isEmpty()) {
+            mapInstance.fitBounds(bounds, 100);
+        }
+
+        showLoading(false);
+      }
+
+      async function searchNearbyPlaces(location, radius, query) {
+        const url = 'https://places.googleapis.com/v1/places:searchText';
+        const headers = {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.types,places.regularOpeningHours'
+        };
+        const body = JSON.stringify({
+            textQuery: query,
+            maxResultCount: 20,
+            locationBias: {
+                circle: {
+                    center: { latitude: location.lat, longitude: location.lng },
+                    radius: radius
+                }
+            }
+        });
+
+        try {
+          const response = await fetch(url, { method: 'POST', headers, body });
+          if (!response.ok) {
+            let errorDetails = response.statusText;
+            try { const errorData = await response.json(); errorDetails = errorData.error?.message || JSON.stringify(errorData); } catch (e) {}
+            throw new Error(`Search failed (${response.status}): ${errorDetails}`);
+          }
+          const data = await response.json();
+          return data.places || [];
+        } catch (error) {
+          console.error('Search fetch error:', error);
+          showError(`Search failed: ${error.message}`);
+          return [];
+        }
+      }
+
+      function addSearchOriginMarker(position, title) {
+          if (!AdvancedMarkerElement || !PinElement || !mapInstance) { showError("Marker components or map not ready."); return; }
+          if (searchOriginMarker) {
+              searchOriginMarker.position = position;
+              searchOriginMarker.title = `Searched Location: ${title}`;
+              searchOriginMarker.map = mapInstance;
+          } else {
+              const pin = new PinElement({ background: "#FBBC04", borderColor: "#1967D2", glyphColor: "white" });
+              searchOriginMarker = new AdvancedMarkerElement({
+                  position: position, map: mapInstance, title: `Searched Location: ${title}`, content: pin.element, zIndex: 10
+              });
+          }
+      }
+
+      function addPlaceMarker(position, placeData) {
+          if (!AdvancedMarkerElement || !mapInstance) { showError("Marker class or map not ready."); return null; }
+          const placeName = placeData.displayName?.text || 'Place';
+          const markerContent = document.createElement('div');
+          markerContent.className = 'shop-marker-tag';
+          markerContent.textContent = placeName;
+
+          const marker = new AdvancedMarkerElement({
+              position: position, map: mapInstance, title: placeName, content: markerContent, gmpClickable: true, zIndex: 1
+          });
+           marker.placeData = placeData;
+           marker.addEventListener('gmp-click', () => handleMarkerOrListClick(placeData.id));
+           return marker;
+        }
+
+       function createListItem(place, rank) {
+            const item = document.createElement('div');
+            item.className = 'list-item';
+            item.dataset.placeId = place.id;
+
+            let ratingHtml = '<span class="text-gray-500">No rating</span>';
+            if (place.rating) {
+                const ratingCount = place.userRatingCount ? ` (${place.userRatingCount})` : '';
+                ratingHtml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg><span>${place.rating.toFixed(1)}${ratingCount}</span>`;
+            }
+            let hoursStatusHtml = '';
+            if (place.regularOpeningHours?.openNow !== undefined) {
+                const isOpen = place.regularOpeningHours.openNow;
+                const statusClass = isOpen ? 'text-green-600' : 'text-red-600';
+                const statusText = isOpen ? 'Open Now' : 'Closed';
+                hoursStatusHtml = `<span class="${statusClass} font-medium ml-2">${statusText}</span>`;
+            }
+            item.innerHTML = `
+                <div class="rank">${rank}.</div>
+                <div class="content">
+                    <div class="name">${place.displayName?.text || 'Unnamed Place'}</div>
+                    <div class="details">${ratingHtml}${hoursStatusHtml}</div>
+                    <div class="address">${place.formattedAddress || 'Address unavailable'}</div>
+                </div>`;
+            item.addEventListener('click', () => handleMarkerOrListClick(place.id));
+            return item;
+       }
+
+       function handleMarkerOrListClick(placeId) {
+           if (!placeId || !mapInstance) return;
+           const marker = activeMarkers.get(placeId);
+           if (marker?.position) {
+               mapInstance.panTo(marker.position);
+           }
+           document.querySelectorAll('.list-item.selected').forEach(el => el.classList.remove('selected'));
+           const listItem = resultsListDiv.querySelector(`[data-place-id="${placeId}"]`);
+           if (listItem) {
+               listItem.classList.add('selected');
+               listItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+           }
+           showPlaceDetailsPanel(placeId);
+       }
+
+       async function showPlaceDetailsPanel(placeId) {
+           if (!placeDetailsWidget || !placeId || !detailsPanel) {
+               showError("Cannot display place details.");
+               return;
+           }
+           detailsPanel.style.display = 'flex';
+           showLoading(true, "Loading place details...");
+           try {
+               await customElements.whenDefined('gmp-place-details');
+               await placeDetailsWidget.configureFromPlace({ id: placeId });
+               showError('');
+           } catch (error) {
+               console.error(`Place Details config error for ${placeId}:`, error);
+               showError(`Could not load details: ${error.message}`);
+               hidePlaceDetailsPanel();
+           } finally {
+               showLoading(false);
+           }
+       }
+
+       function hidePlaceDetailsPanel() {
+           if (detailsPanel) detailsPanel.style.display = 'none';
+           document.querySelectorAll('.list-item.selected').forEach(el => el.classList.remove('selected'));
+       }
+
+       function updateSidebarTitle(locationName) {
+           if (sidebarTitle) sidebarTitle.textContent = `Top 5 ${placeTypeQuery}`;
+           if (sidebarSubtitle) sidebarSubtitle.textContent = `Near ${locationName}`;
+       }
+
+       function clearMarkers() {
+           activeMarkers.forEach(marker => { marker.map = null; });
+           activeMarkers.clear();
+       }
+
+      window.hidePlaceDetailsPanel = hidePlaceDetailsPanel;
+      init();
+    </script>
+</body>
+</html>

@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Citi Bike Station Visualization</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <style>
+        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }
+        #map-container { height: 100%; width: 100%; position: relative; }
+        #map { height: 100%; width: 100%; background-color: #e5e7eb; }
+        .sidebar-content::-webkit-scrollbar { width: 6px; }
+        .sidebar-content::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,0.2); border-radius: 3px; }
+        #tooltip { position: absolute; background: rgba(0, 0, 0, 0.7); color: white; padding: 5px 8px; border-radius: 4px; font-size: 0.8rem; pointer-events: none; z-index: 999; display: none; white-space: nowrap; }
+        #loading-indicator, #error-message { position: absolute; top: 1rem; left: calc(20rem + 1.5rem); /* Adjust based on sidebar width */ background: white; padding: 0.5rem 1rem; border-radius: 0.375rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); z-index: 10; font-size: 0.8rem; }
+        #loading-indicator { display: none; align-items: center; gap: 0.5rem; color: #2563eb; }
+        #error-message { display: none; color: #dc2626; font-weight: 500; }
+        /* Responsive adjustments for loading/error indicators */
+        @media (max-width: 768px) {
+            #loading-indicator, #error-message { top: 1rem; left: 1rem; right: 1rem; width: auto; }
+        }
+    </style>
+    <script>
+      (g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await(a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t.toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=`https://maps.${c}apis.com/maps/api/js?`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})({
+        key: "YOUR_API_KEY", v: "alpha", map_ids: "YOUR_MAP_ID"
+      });
+    </script>
+</head>
+<body class="relative h-screen overflow-hidden antialiased text-gray-800">
+    <div id="map-container" class="absolute inset-0 z-0">
+       <div id="map"></div>
+    </div>
+    <aside id="sidebar" class="absolute top-3 left-3 w-80 max-w-[calc(100%-1.5rem)] bg-white rounded-lg shadow-lg z-10 flex flex-col overflow-hidden md:bottom-auto md:max-h-[calc(100%-2rem)] max-md:bottom-0 max-md:left-0 max-md:right-0 max-md:top-auto max-md:w-full max-md:max-w-full max-md:max-h-[40vh] max-md:rounded-none max-md:rounded-t-lg max-md:border-t">
+        <div class="p-3 border-b flex-shrink-0">
+            <h2 id="sidebar-title" class="text-lg font-semibold">Citi Bike Stations</h2>
+            <p id="sidebar-subtitle" class="text-xs text-gray-500">Availability Visualization</p>
+        </div>
+        <div class="sidebar-content flex-grow p-3 overflow-y-auto space-y-4"> <!-- Increased space -->
+            <p class="text-xs text-gray-600">
+                Visualizing Citi Bike station status using live data from a public GeoJSON feed.
+                Colors indicate bike availability. Hover over points for details.
+            </p>
+            <!-- Legend -->
+            <div>
+                <h3 class="text-sm font-semibold mb-1 text-gray-700">Legend</h3>
+                <div class="space-y-1 text-xs">
+                    <div class="flex items-center">
+                        <span class="w-3 h-3 rounded-full bg-green-600 mr-2 inline-block flex-shrink-0" style="background-color: rgb(0, 128, 0);"></span>
+                        <span>3+ Bikes Available</span>
+                    </div>
+                    <div class="flex items-center">
+                        <span class="w-3 h-3 rounded-full bg-orange-500 mr-2 inline-block flex-shrink-0" style="background-color: rgb(255, 165, 0);"></span>
+                        <span>1-2 Bikes Available</span>
+                    </div>
+                    <div class="flex items-center">
+                        <span class="w-3 h-3 rounded-full bg-red-600 mr-2 inline-block flex-shrink-0" style="background-color: rgb(255, 0, 0);"></span>
+                        <span>0 Bikes Available</span>
+                    </div>
+                </div>
+            </div>
+            <div id="results-list" class="text-sm border-t mt-3 pt-3">
+                <!-- List could be populated here if needed, maybe station names? -->
+            </div>
+        </div>
+    </aside>
+    <div id="tooltip"></div>
+    <div id="loading-indicator">
+        <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"> <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle> <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path> </svg>
+        <span id="loading-text">Loading...</span>
+    </div>
+    <div id="error-message"></div>
+
+    <!-- Load deck.gl scripts *before* the main module script - Using specific version -->
+    <script src="https://unpkg.com/deck.gl@8.9.34/dist.min.js"></script>
+    <script src="https://unpkg.com/@deck.gl/layers@8.9.34/dist.min.js"></script>
+    <script src="https://unpkg.com/@deck.gl/google-maps@8.9.34/dist.min.js"></script>
+
+    <script type="module">
+      // --- Module-Level Variables ---
+      let mapInstance;
+      let GoogleMap, LatLngBounds; // GMP classes
+      let deckOverlay; // deck.gl overlay instance
+      const apiKey = "YOUR_API_KEY"; // Placeholder
+      const mapId = "YOUR_MAP_ID"; // Placeholder
+      const dataUrl = "https://raw.githubusercontent.com/MaxHalford/bike-sharing-history/refs/heads/main/data/stations/new-york-city/citibike.geojson";
+      const initialCenter = { lat: 40.7128, lng: -74.0060 }; // New York City center
+      const initialZoom = 12;
+
+      // --- DOM Element References ---
+      let mapDiv, tooltipDiv, loadingIndicator, loadingText, errorMessageDiv, sidebarTitle, sidebarSubtitle, resultsListDiv;
+
+      // --- Utility Functions ---
+      function showLoading(isLoading, text = "Loading...") {
+          if (!loadingIndicator || !loadingText) return;
+          loadingText.textContent = text;
+          loadingIndicator.style.display = isLoading ? 'flex' : 'none';
+          if (isLoading) showError('');
+      }
+      function showError(message) {
+          if (!errorMessageDiv) return;
+          errorMessageDiv.textContent = message || '';
+          errorMessageDiv.style.display = message ? 'block' : 'none';
+          if (message) showLoading(false); // Hide loading if error occurs
+      }
+
+      // --- Initialization Sequence ---
+      async function init() {
+        try {
+          // 1. Load Libraries & Assign Classes
+          await loadGmpServices();
+
+          // 2. Get DOM Element References
+          getDomElements();
+
+          // 3. Perform Prerequisite Async Ops (None needed before map)
+
+          // 4. Instantiate Core GMP Object: Map
+          init2DMap(initialCenter, initialZoom);
+
+          // 5. Instantiate Dependent Services/UI: (deck.gl moved to idle listener)
+
+          // 6. Bind UI Elements (None needed here)
+
+          // 7. Add Event Listeners - Defer deck.gl init until map is idle
+          google.maps.event.addListenerOnce(mapInstance, 'idle', async () => {
+              console.log("Map is idle, initializing deck.gl overlay and loading data...");
+              showLoading(true, "Initializing visualization...");
+              try {
+                  // Initialize overlay *after* map is idle
+                  initializeDeckGlOverlay(mapInstance);
+                  // Load data *after* overlay is initialized
+                  await loadAndDisplayData();
+              } catch (deckError) {
+                  console.error("Error during deck.gl initialization or data loading:", deckError);
+                  showError(`Failed to load visualization: ${deckError.message}`);
+              } finally {
+                  showLoading(false); // Ensure loading is hidden even if deck init fails
+              }
+          });
+
+          // 8. Load Initial Data/Layers (Moved inside 'idle' listener)
+
+        } catch (error) {
+          console.error("Initialization failed:", error);
+          showError(`Initialization failed: ${error.message}. Check API key/Map ID or network connection.`);
+          showLoading(false);
+        }
+      }
+
+      async function loadGmpServices() {
+        showLoading(true, "Loading Google Maps services...");
+        try {
+            const [mapsLib, coreLib] = await Promise.all([
+                google.maps.importLibrary("maps"),
+                google.maps.importLibrary("core")
+            ]);
+            GoogleMap = mapsLib.Map;
+            LatLngBounds = coreLib.LatLngBounds;
+        } catch (error) {
+            console.error("Failed to load Google Maps libraries:", error);
+            showError(`Failed to load services: ${error.message}`);
+            throw error;
+        } finally {
+            showLoading(false);
+        }
+      }
+
+      function getDomElements() {
+          mapDiv = document.getElementById('map');
+          tooltipDiv = document.getElementById('tooltip');
+          loadingIndicator = document.getElementById('loading-indicator');
+          loadingText = document.getElementById('loading-text');
+          errorMessageDiv = document.getElementById('error-message');
+          sidebarTitle = document.getElementById('sidebar-title');
+          sidebarSubtitle = document.getElementById('sidebar-subtitle');
+          resultsListDiv = document.getElementById('results-list');
+          if (!mapDiv || !tooltipDiv || !loadingIndicator || !errorMessageDiv || !sidebarTitle) {
+              throw new Error("One or more essential HTML elements are missing.");
+          }
+      }
+
+      function init2DMap(centerCoords, zoomLevel) {
+        if (!GoogleMap) throw new Error("GoogleMap class not loaded.");
+        if (!mapId) throw new Error("Map ID is required.");
+        if (!mapDiv) throw new Error("Map container element ('mapDiv') not found.");
+
+        mapInstance = new GoogleMap(mapDiv, {
+            center: centerCoords,
+            zoom: zoomLevel,
+            mapId: mapId,
+            gestureHandling: "greedy",
+            disableDefaultUI: true,
+            zoomControl: true,
+        });
+      }
+
+      function initializeDeckGlOverlay(mapInstanceRef) {
+          // Add more robust check, explicitly using window.deck
+          if (typeof window.deck === 'undefined' || typeof window.deck.GoogleMapsOverlay === 'undefined') {
+              showError("deck.gl or GoogleMapsOverlay class not found. Check script loading order/integrity.");
+              console.error("deck.gl objects not found on window:", window.deck);
+              throw new Error("deck.gl GoogleMapsOverlay class not loaded.");
+          }
+          try {
+              // Explicitly use window.deck
+              deckOverlay = new window.deck.GoogleMapsOverlay({
+                  // Interleave deck.gl layers with Google Maps base map and labels
+                  interleaved: true,
+                  layers: []
+              });
+              deckOverlay.setMap(mapInstanceRef);
+              console.log("deck.gl overlay initialized and set on map.");
+          } catch (e) {
+              showError(`Failed to initialize deck.gl overlay: ${e.message}`);
+              console.error("deck.gl Overlay Initialization Error:", e);
+              throw e; // Re-throw to stop further execution if critical
+          }
+      }
+
+      // --- Data Loading and deck.gl Layer ---
+      async function loadAndDisplayData() {
+          if (!deckOverlay) { // Check if overlay was successfully initialized
+              showError("deck.gl overlay not available. Cannot load data layer.");
+              return;
+          }
+          // Add explicit check for the required layer class
+          if (typeof window.deck?.ScatterplotLayer === 'undefined') {
+              showError("deck.gl ScatterplotLayer class not found. Check script loading.");
+              console.error("deck.ScatterplotLayer not found on window.deck:", window.deck);
+              showLoading(false); // Hide loading indicator
+              return; // Stop if class is missing
+          }
+
+          showLoading(true, "Loading Citi Bike station data...");
+          try {
+              // Explicitly fetch the GeoJSON data
+              const response = await fetch(dataUrl);
+              if (!response.ok) {
+                  throw new Error(`Failed to fetch station data (${response.status}): ${response.statusText}`);
+              }
+              const geojsonData = await response.json();
+
+              if (!geojsonData || !geojsonData.features) {
+                  throw new Error("Invalid GeoJSON data format received.");
+              }
+
+              console.log(`Fetched ${geojsonData.features.length} station features.`);
+
+              // Overlay is already initialized, create and set the layer with fetched data
+              // Explicitly use window.deck
+              const stationLayer = new window.deck.ScatterplotLayer({ // Now safe to use
+                  id: 'citi-bike-stations',
+                  data: geojsonData.features, // Use the fetched features array
+                  // Data Accessors
+                  getPosition: d => d.geometry.coordinates, // GeoJSON is [lng, lat]
+                  getFillColor: d => {
+                      const bikes = d.properties.num_bikes_available || 0;
+                      if (bikes === 0) return [255, 0, 0, 180]; // Red: 0 bikes
+                      if (bikes < 3) return [255, 165, 0, 180]; // Orange: 1-2 bikes
+                      return [0, 128, 0, 180]; // Green: 3+ bikes
+                  },
+                  getRadius: 5, // Fixed radius in pixels
+                  // Styling
+                  radiusUnits: 'pixels',
+                  radiusMinPixels: 2,
+                  radiusMaxPixels: 10,
+                  // Interaction
+                  pickable: true,
+                  autoHighlight: true,
+                  highlightColor: [0, 0, 255, 200], // Blue highlight
+                  onHover: handleDeckHover,
+              });
+
+              deckOverlay.setProps({ layers: [stationLayer] });
+              console.log("deck.gl ScatterplotLayer created and set.");
+              showLoading(false); // Hide loading *after* layer is set
+
+              // Optional: Fit bounds after data loads (requires explicit fetch first)
+              // const response = await fetch(dataUrl);
+              // if (!response.ok) throw new Error(`Failed to fetch data: ${response.statusText}`);
+              // const geojsonData = await response.json();
+              // fitBoundsToData(geojsonData.features);
+              // deckOverlay.setProps({ layers: [stationLayer] }); // Update layer with fetched data if needed
+
+          } catch (error) {
+              console.error('Error loading or displaying deck.gl data:', error);
+              showError(`Failed to load station data layer: ${error.message}`);
+              showLoading(false);
+          }
+      }
+
+      function fitBoundsToData(features) {
+          if (!features || features.length === 0 || !mapInstance || !LatLngBounds) return;
+          const bounds = new LatLngBounds();
+          features.forEach(feature => {
+              if (feature.geometry?.type === 'Point' && feature.geometry.coordinates) {
+                  const [lng, lat] = feature.geometry.coordinates;
+                  bounds.extend({ lat, lng });
+              }
+          });
+          if (!bounds.isEmpty()) {
+              mapInstance.fitBounds(bounds, 50); // 50px padding
+          }
+      }
+
+      // --- Tooltip Handling ---
+      function handleDeckHover({ object, x, y }) {
+          if (!tooltipDiv) return;
+          if (object) {
+              const name = object.properties.name || 'N/A';
+              const bikes = object.properties.num_bikes_available ?? 'N/A';
+              const capacity = object.properties.capacity ?? 'N/A';
+              tooltipDiv.innerHTML = `
+                  <strong>${name}</strong><br>
+                  Bikes Available: ${bikes}<br>
+                  Capacity: ${capacity}
+              `;
+              tooltipDiv.style.left = `${x + 5}px`;
+              tooltipDiv.style.top = `${y + 5}px`;
+              tooltipDiv.style.display = 'block';
+          } else {
+              tooltipDiv.style.display = 'none';
+          }
+      }
+
+      // --- Startup ---
+      init();
+
+    </script>
+</body>
+</html>

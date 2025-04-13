@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Coffee Shop Explorer</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <style>
+        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: sans-serif; }
+        #map-container { height: 100%; width: 100%; position: relative; }
+        #map3d-host { height: 100%; width: 100%; background-color: #333; }
+        gmp-map-3d { display: block; height: 100%; width: 100%; }
+        .sidebar-content::-webkit-scrollbar { width: 6px; }
+        .sidebar-content::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,0.2); border-radius: 3px; }
+        #details-panel { position: absolute; top: 1rem; right: 1rem; background: white; border-radius: 0.5rem; box-shadow: 0 2px 10px rgba(0,0,0,0.1); z-index: 20; max-width: 350px; max-height: calc(100vh - 2rem); display: none; flex-direction: column; }
+        #details-panel .panel-header { padding: 0.5rem 0.75rem; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; }
+        #details-panel .panel-header h3 { font-size: 0.9rem; font-weight: 600; margin: 0; }
+        #details-panel .close-button { background: none; border: none; font-size: 1.2rem; cursor: pointer; padding: 0.25rem; line-height: 1; }
+        #details-panel .panel-content { padding: 0; overflow-y: auto; flex-grow: 1; }
+        gmp-place-details { display: block; width: 100%; }
+        .list-item { display: flex; align-items: center; padding: 10px 12px; border-bottom: 1px solid #e0e0e0; cursor: pointer; transition: background-color 0.15s ease-in-out; }
+        .list-item:hover { background-color: #f5f5f5; }
+        .list-item.selected { background-color: #e8f0fe; border-left: 4px solid #1967d2; padding-left: 8px; }
+        .list-item .icon { width: 20px; height: 20px; margin-right: 10px; fill: #6d4c41; flex-shrink: 0; } /* Coffee bean color */
+        .list-item .content { flex: 1; }
+        .list-item .name { font-size: 0.9rem; font-weight: 500; color: #202124; margin-bottom: 2px; }
+        .list-item .details { font-size: 0.75rem; color: #5f6368; display: flex; align-items: center; gap: 4px; }
+        .list-item .details svg { width: 12px; height: 12px; fill: #fbbc04; }
+    </style>
+    <script>
+      (g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await(a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t.toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=`https://maps.${c}apis.com/maps/api/js?`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})({
+        key: "YOUR_API_KEY", v: "alpha"
+      });
+    </script>
+</head>
+<body class="relative h-screen overflow-hidden antialiased text-gray-800">
+    <div id="map-container" class="absolute inset-0 z-0">
+       <div id="map3d-host"></div>
+    </div>
+    <aside id="sidebar" class="absolute top-3 left-3 w-72 max-w-[calc(100%-1.5rem)] bg-white rounded-lg shadow-lg z-10 flex flex-col overflow-hidden md:bottom-auto md:max-h-[calc(100%-2rem)] max-md:bottom-0 max-md:left-0 max-md:right-0 max-md:top-auto max-md:w-full max-md:max-w-full max-md:max-h-[40vh] max-md:rounded-none max-md:rounded-t-lg max-md:border-t">
+        <div class="p-3 border-b flex-shrink-0">
+            <h2 id="sidebar-title" class="text-lg font-semibold">Top 5 Coffee Shops</h2>
+            <p id="sidebar-subtitle" class="text-xs text-gray-500">Near Moscone Center (3D)</p>
+        </div>
+        <div class="sidebar-content flex-grow overflow-y-auto">
+            <div id="loading-indicator" class="p-3 text-xs text-blue-600 italic hidden flex items-center gap-2">
+                <svg class="animate-spin h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"> <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle> <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path> </svg>
+                <span id="loading-text">Loading...</span>
+            </div>
+            <div id="error-message" class="p-3 text-xs text-red-600 font-medium"></div>
+             <div id="results-list" class="text-sm"></div>
+        </div>
+    </aside>
+    <div id="details-panel">
+         <div class="panel-header">
+             <h3>Place Details</h3>
+             <button class="close-button" onclick="hidePlaceDetailsPanel()">×</button>
+         </div>
+         <div class="panel-content">
+             <gmp-place-details size="medium" id="place-details-widget"></gmp-place-details>
+         </div>
+     </div>
+    <script type="module">
+      let map3d, geocoder, elevator, placeDetailsWidget, searchOriginMarker;
+      let Map3DElement, Marker3DInteractiveElement, AltitudeMode, MapMode, PinElement, ElevationService, Geocoder, LatLng;
+      let activeMarkers = new Map();
+      let searchOrigin = null;
+      const apiKey = "YOUR_API_KEY";
+      const defaultSearchAddress = "Moscone Center, San Francisco, CA";
+      const searchRadiusMeters = 1500;
+      const placeTypeQuery = "coffee shop";
+      const markerAltitudeOffset = 15; // Meters above ground
+
+      let mapHost, sidebarTitle, sidebarSubtitle, loadingIndicator, loadingText, errorMessageDiv, resultsListDiv, detailsPanel;
+
+      function showLoading(isLoading, text = "Loading...") {
+          if (!loadingIndicator || !loadingText) return;
+          loadingText.textContent = text;
+          loadingIndicator.style.display = isLoading ? 'flex' : 'none';
+          if (isLoading) showError('');
+      }
+      function showError(message) {
+          if (!errorMessageDiv) return;
+          errorMessageDiv.textContent = message || '';
+          errorMessageDiv.style.display = message ? 'block' : 'none';
+      }
+      function apiToJsCoords(apiCoords) {
+          return apiCoords ? { lat: apiCoords.latitude, lng: apiCoords.longitude } : null;
+      }
+
+      async function init() {
+        try {
+          await loadServicesAndComponents();
+          getDomElements();
+
+          showLoading(true, `Finding "${defaultSearchAddress}"...`);
+          const initialLocationResult = await geocodeSearchCenter(defaultSearchAddress);
+          let initialCenter, initialName, initialPlaceId;
+          if (initialLocationResult?.geometry?.location) {
+              initialCenter = initialLocationResult.geometry.location;
+              initialName = initialLocationResult.formatted_address || defaultSearchAddress;
+              initialPlaceId = initialLocationResult.place_id;
+              searchOrigin = { location: initialCenter, placeId: initialPlaceId, name: initialName };
+          } else {
+              showError(`Could not find initial location: "${defaultSearchAddress}". Defaulting to SF.`);
+              initialCenter = { lat: 37.783, lng: -122.403 };
+              initialName = "San Francisco";
+              updateSidebarTitle(initialName);
+          }
+          showLoading(false);
+
+          init3DMap(initialCenter);
+          setupPlaceDetailsWidget();
+
+          if (searchOrigin) {
+              await addSearchOriginMarker3D(searchOrigin.location, searchOrigin.name, searchOrigin.placeId);
+              updateSidebarTitle(searchOrigin.name);
+              await findAndDisplayPlaces3D(searchOrigin.location, searchOrigin.name);
+          }
+
+        } catch (error) {
+          console.error("Initialization failed:", error);
+          showError(`Map initialization failed: ${error.message}. Check API key or network connection.`);
+          showLoading(false);
+        }
+      }
+
+      async function loadServicesAndComponents() {
+          showLoading(true, "Loading services...");
+          try {
+              const [maps3dLib, markerLib, elevationLib, placesLib, geocodingLib, coreLib] = await Promise.all([
+                  google.maps.importLibrary("maps3d"),
+                  google.maps.importLibrary("marker"),
+                  google.maps.importLibrary("elevation"),
+                  google.maps.importLibrary("places"),
+                  google.maps.importLibrary("geocoding"),
+                  google.maps.importLibrary("core")
+              ]);
+              Map3DElement = maps3dLib.Map3DElement;
+              Marker3DInteractiveElement = maps3dLib.Marker3DInteractiveElement;
+              AltitudeMode = maps3dLib.AltitudeMode;
+              MapMode = maps3dLib.MapMode;
+              PinElement = markerLib.PinElement;
+              ElevationService = elevationLib.ElevationService;
+              Geocoder = geocodingLib.Geocoder;
+              LatLng = coreLib.LatLng;
+
+              geocoder = new Geocoder();
+              elevator = new ElevationService();
+          } catch (error) {
+              console.error("Failed to load Google Maps libraries:", error);
+              showError(`Failed to load services: ${error.message}`);
+              throw error;
+          } finally {
+              showLoading(false);
+          }
+      }
+
+      function getDomElements() {
+          mapHost = document.getElementById('map3d-host');
+          sidebarTitle = document.getElementById('sidebar-title');
+          sidebarSubtitle = document.getElementById('sidebar-subtitle');
+          loadingIndicator = document.getElementById('loading-indicator');
+          loadingText = document.getElementById('loading-text');
+          errorMessageDiv = document.getElementById('error-message');
+          resultsListDiv = document.getElementById('results-list');
+          detailsPanel = document.getElementById('details-panel');
+          if (!mapHost || !resultsListDiv || !detailsPanel || !sidebarTitle || !sidebarSubtitle) {
+              throw new Error("One or more essential HTML elements are missing.");
+          }
+      }
+
+      function init3DMap(centerCoords) {
+        if (!Map3DElement || !MapMode || !mapHost) throw new Error("3D Map components or container not ready.");
+        map3d = new Map3DElement({
+            center: { lat: centerCoords.lat(), lng: centerCoords.lng(), altitude: 200 },
+            range: 3000, tilt: 45, heading: -45, mode: MapMode.SATELLITE,
+            defaultUIDisabled: true,
+        });
+        mapHost.appendChild(map3d);
+        map3d.addEventListener('gmp-click', (e) => {
+            if (!e.target.closest('gmp-marker-3d-interactive')) {
+                 hidePlaceDetailsPanel();
+            }
+        });
+      }
+
+      function setupPlaceDetailsWidget() {
+          placeDetailsWidget = document.getElementById('place-details-widget');
+          if (!placeDetailsWidget) {
+              console.error("Place Details Widget element not found!");
+          }
+      }
+
+      async function geocodeSearchCenter(address) {
+        if (!geocoder) { showError("Geocoding service unavailable."); return null; }
+        try {
+            const { results } = await geocoder.geocode({ address: address });
+            return results?.[0] ?? null;
+        } catch (e) {
+            console.error("Geocode failed:", e);
+            showError(`Geocoding error: ${e.message}`);
+            return null;
+        }
+      }
+
+      async function findAndDisplayPlaces3D(centerLocation, locationName = "selected area") {
+        showLoading(true, `Searching for ${placeTypeQuery} near ${locationName}...`);
+        resultsListDiv.innerHTML = '';
+        clearPlaceMarkers();
+        hidePlaceDetailsPanel();
+
+        const places = await searchNearbyPlaces(centerLocation.toJSON(), searchRadiusMeters, placeTypeQuery);
+
+        if (!places || places.length === 0) {
+          showError(`No ${placeTypeQuery} found near ${locationName}.`);
+          resultsListDiv.innerHTML = '<p class="text-gray-500 p-4">No results found.</p>';
+          showLoading(false);
+          return;
+        }
+
+        const topRatedPlaces = places
+          .filter(p => p.rating && p.rating >= 4.0 && p.userRatingCount && p.userRatingCount >= 10)
+          .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+          .slice(0, 5);
+
+        if (topRatedPlaces.length === 0) {
+            showError(`Found ${placeTypeQuery} near ${locationName}, but none met the rating/review criteria (>= 4.0 stars, >= 10 reviews).`);
+            resultsListDiv.innerHTML = '<p class="text-gray-500 p-4">No highly-rated places found matching criteria.</p>';
+            showLoading(false);
+            return;
+        }
+
+        if (!Marker3DInteractiveElement || !PinElement || !AltitudeMode || !map3d) {
+            showError("Cannot add markers: Required components or map not loaded.");
+            showLoading(false);
+            return;
+        }
+
+        const locationsLatLng = topRatedPlaces.map(p => apiToJsCoords(p.location)).filter(loc => loc !== null);
+        if (locationsLatLng.length === 0) {
+             showError("Could not extract valid coordinates for found places.");
+             showLoading(false);
+             return;
+        }
+        const elevations = await getElevationsForPoints(locationsLatLng);
+
+        if (elevations.length !== topRatedPlaces.length) {
+             showError("Mismatch fetching elevations for places.");
+             showLoading(false);
+             return;
+        }
+
+        populateList3D(topRatedPlaces);
+
+        topRatedPlaces.forEach((place, index) => {
+          const position = apiToJsCoords(place.location);
+          const elevation = elevations[index];
+          if (!position) return;
+          addPlaceMarker3D(position, elevation, place);
+        });
+
+        if (searchOrigin?.location) {
+            flyToLocation(searchOrigin.location.toJSON(), 3000, 45); // Fly back to origin view
+        }
+
+        showLoading(false);
+      }
+
+      async function searchNearbyPlaces(location, radius, query) {
+        const url = 'https://places.googleapis.com/v1/places:searchText';
+        const headers = {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.location,places.rating,places.userRatingCount,places.types,places.regularOpeningHours'
+        };
+        const body = JSON.stringify({
+            textQuery: query,
+            maxResultCount: 20,
+            locationBias: {
+                circle: {
+                    center: { latitude: location.lat, longitude: location.lng },
+                    radius: radius
+                }
+            }
+        });
+
+        try {
+          const response = await fetch(url, { method: 'POST', headers, body });
+          if (!response.ok) {
+            let errorDetails = response.statusText;
+            try { const errorData = await response.json(); errorDetails = errorData.error?.message || JSON.stringify(errorData); } catch (e) {}
+            throw new Error(`Search failed (${response.status}): ${errorDetails}`);
+          }
+          const data = await response.json();
+          return data.places || [];
+        } catch (error) {
+          console.error('Search fetch error:', error);
+          showError(`Search failed: ${error.message}`);
+          return [];
+        }
+      }
+
+      async function getClientElevation(latLng) {
+        if (!elevator) return 10; // Default elevation if service fails
+        try {
+          const { results } = await elevator.getElevationForLocations({ locations: [latLng] });
+          return results?.[0]?.elevation ?? 10;
+        } catch (e) {
+          console.error("Elevation failed:", e);
+          showError(`Elevation lookup error: ${e.message}`);
+          return 10;
+        }
+      }
+
+      async function getElevationsForPoints(locations) {
+          if (!elevator || locations.length === 0) return locations.map(() => 10);
+          const batchSize = 200;
+          let allElevations = [];
+          showLoading(true, "Fetching elevations...");
+          try {
+              for (let i = 0; i < locations.length; i += batchSize) {
+                  const batchLocations = locations.slice(i, i + batchSize);
+                  const { results } = await elevator.getElevationForLocations({ locations: batchLocations });
+                  const elevations = results.map(result => result?.elevation ?? 10);
+                  allElevations.push(...elevations);
+              }
+          } catch (e) {
+              console.error(`Elevation fetch error:`, e);
+              showError(`Elevation fetch error: ${e.message}`);
+              const remaining = locations.length - allElevations.length;
+              if (remaining > 0) {
+                  allElevations.push(...Array(remaining).fill(10));
+              }
+          } finally {
+              showLoading(false);
+          }
+          return allElevations;
+      }
+
+      async function flyToLocation(targetCoords, range = 1000, tilt = 60, heading = null, duration = 1500) {
+          if (!map3d || !targetCoords) return;
+          const currentHeading = map3d.heading;
+          const endCamera = { center: targetCoords, range, tilt, heading: heading ?? currentHeading };
+          try {
+              await map3d.flyCameraTo({ endCamera, durationMillis: duration });
+          } catch (error) {
+              if (error.name === 'AbortError' || error.message?.includes('interrupted')) {
+                 console.log("Camera animation interrupted.");
+              } else { console.error("flyCameraTo error:", error); }
+          }
+      }
+
+      async function addSearchOriginMarker3D(location, title, placeId) {
+          if (!Marker3DInteractiveElement || !PinElement || !AltitudeMode || !map3d) { showError("Marker components or map not ready."); return; }
+          const elevation = await getClientElevation(location.toJSON());
+          const position = { lat: location.lat(), lng: location.lng(), altitude: elevation + markerAltitudeOffset };
+
+          if (searchOriginMarker) {
+              searchOriginMarker.position = position;
+              searchOriginMarker.title = `Searched: ${title}`;
+              searchOriginMarker.dataset.placeId = placeId;
+          } else {
+          // Use a star glyph for the search origin
+          const starGlyph = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          starGlyph.setAttribute("d", "M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z");
+          const pin = new PinElement({ background: "#FBBC04", glyph: starGlyph, glyphColor: "black", scale: 1.4, borderColor: "#FFFFFF" }); // White border
+          searchOriginMarker = new Marker3DInteractiveElement({
+              position: position,
+                  altitudeMode: AltitudeMode.RELATIVE_TO_GROUND,
+                  title: `Searched: ${title}`,
+              });
+              searchOriginMarker.appendChild(pin);
+              searchOriginMarker.dataset.placeId = placeId;
+              searchOriginMarker.dataset.locationId = 'search-origin'; // Unique ID for map key
+
+              searchOriginMarker.addEventListener('gmp-click', (e) => {
+                  const clickedPlaceId = e.currentTarget.dataset.placeId;
+                  handleMarkerOrListClick('search-origin', clickedPlaceId);
+              });
+              map3d.appendChild(searchOriginMarker);
+              activeMarkers.set('search-origin', searchOriginMarker);
+          }
+      }
+
+      function addPlaceMarker3D(position, elevation, placeData) {
+          const placeName = placeData.displayName?.text || 'Coffee Shop';
+          const markerPosition = { lat: position.lat, lng: position.lng, altitude: elevation + markerAltitudeOffset };
+
+          // Use a coffee cup glyph
+          const coffeeGlyph = document.createElementNS("http://www.w3.org/2000/svg", "path");
+          coffeeGlyph.setAttribute("d", "M18.5 3H6c-1.1 0-2 .9-2 2v5.71c0 3.83 2.95 7.18 6.78 7.29 3.96.12 7.22-3.06 7.22-7v-6c0-.83-.67-1.5-1.5-1.5S17 4.67 17 5.5V9h-2.5V3.5h4zM6 14.5c0 .83.67 1.5 1.5 1.5h1c.83 0 1.5-.67 1.5-1.5V11H6v3.5zm13.5 1.5c.83 0 1.5-.67 1.5-1.5V11h-5v3.5c0 .83.67 1.5 1.5 1.5h2z");
+          const pin = new PinElement({ background: '#1A73E8', glyph: coffeeGlyph, glyphColor: '#fff', scale: 1.2, borderColor: "#FFFFFF" }); // Blue background, white border
+          const marker = new Marker3DInteractiveElement({
+              position: markerPosition,
+              altitudeMode: AltitudeMode.RELATIVE_TO_GROUND,
+              title: placeName,
+          });
+          marker.appendChild(pin);
+          marker.dataset.placeId = placeData.id;
+          marker.dataset.locationId = placeData.id; // Use place ID as location ID
+
+          marker.addEventListener('gmp-click', (e) => {
+              const clickedPlaceId = e.currentTarget.dataset.placeId;
+              handleMarkerOrListClick(clickedPlaceId, clickedPlaceId);
+          });
+
+          map3d.appendChild(marker);
+          activeMarkers.set(placeData.id, marker);
+      }
+
+      function populateList3D(places) {
+          resultsListDiv.innerHTML = '';
+          places.forEach(place => {
+              const item = createListItem3D(place);
+              resultsListDiv.appendChild(item);
+          });
+      }
+
+      function createListItem3D(place) {
+          const item = document.createElement('div');
+          item.className = 'list-item';
+          item.dataset.placeId = place.id;
+          item.dataset.locationId = place.id;
+
+          let ratingHtml = '<span class="text-gray-500">No rating</span>';
+            if (place.rating) {
+                const ratingCount = place.userRatingCount ? ` (${place.userRatingCount})` : '';
+                ratingHtml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg><span>${place.rating.toFixed(1)}${ratingCount}</span>`;
+            }
+
+          item.innerHTML = `
+              <svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M18.5 3H6c-1.1 0-2 .9-2 2v5.71c0 3.83 2.95 7.18 6.78 7.29 3.96.12 7.22-3.06 7.22-7v-6c0-.83-.67-1.5-1.5-1.5S17 4.67 17 5.5V9h-2.5V3.5h4zM6 14.5c0 .83.67 1.5 1.5 1.5h1c.83 0 1.5-.67 1.5-1.5V11H6v3.5zm13.5 1.5c.83 0 1.5-.67 1.5-1.5V11h-5v3.5c0 .83.67 1.5 1.5 1.5h2z"/></svg>
+              <div class="content">
+                  <div class="name">${place.displayName?.text || 'Unnamed Place'}</div>
+                  <div class="details">${ratingHtml}</div>
+              </div>`;
+
+          item.addEventListener('click', () => handleMarkerOrListClick(place.id, place.id));
+          return item;
+      }
+
+      function handleMarkerOrListClick(locationId, placeId) {
+          if (!locationId) return;
+          const marker = activeMarkers.get(locationId);
+          if (marker?.position && map3d) {
+              flyToLocation(marker.position, 1000, 65);
+          }
+          document.querySelectorAll('.list-item.selected').forEach(el => el.classList.remove('selected'));
+          const listItem = resultsListDiv.querySelector(`[data-location-id="${locationId}"]`);
+          if (listItem) {
+              listItem.classList.add('selected');
+              listItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          }
+          if (placeId) {
+              showPlaceDetailsPanel(placeId);
+          } else {
+              hidePlaceDetailsPanel();
+              showError("No Place ID available for details.");
+          }
+      }
+
+      async function showPlaceDetailsPanel(placeId) {
+          if (!placeDetailsWidget || !placeId || !detailsPanel) {
+              showError("Cannot display place details.");
+              return;
+          }
+          detailsPanel.style.display = 'flex';
+          showLoading(true, "Loading place details...");
+          try {
+              await customElements.whenDefined('gmp-place-details');
+              await placeDetailsWidget.configureFromPlace({ id: placeId });
+              showError('');
+          } catch (error) {
+              console.error(`Place Details config error for ${placeId}:`, error);
+              showError(`Could not load details: ${error.message}`);
+              hidePlaceDetailsPanel();
+          } finally {
+              showLoading(false);
+          }
+      }
+
+      function hidePlaceDetailsPanel() {
+          if (detailsPanel) detailsPanel.style.display = 'none';
+          document.querySelectorAll('.list-item.selected').forEach(el => el.classList.remove('selected'));
+      }
+
+      function updateSidebarTitle(locationName) {
+           if (sidebarTitle) sidebarTitle.textContent = `Top 5 ${placeTypeQuery}`;
+           if (sidebarSubtitle) sidebarSubtitle.textContent = `Near ${locationName} (3D)`;
+       }
+
+      function clearPlaceMarkers() {
+          activeMarkers.forEach((marker, key) => {
+              if (key !== 'search-origin') { // Keep the origin marker
+                  marker.map = null; // Remove from map
+                  map3d.removeChild(marker); // Remove from 3D map DOM
+                  activeMarkers.delete(key);
+              }
+          });
+      }
+
+      window.hidePlaceDetailsPanel = hidePlaceDetailsPanel;
+      init();
+    </script>
+</body>
+</html>

@@ -71,10 +71,7 @@ Cline is particularly well-suited for this workflow as it's an agent integrated 
 
 ## Tips for Success
 
-*   **Be Specific:** Clear, detailed prompts lead to better results. Mention desired APIs (Places API New, Routes API), features (markers, polylines, UI Kit components), and map types (2D/3D).
-*   **Use `v=alpha`:** The provided templates and context heavily rely on features available in the `alpha` release channel of the Maps JavaScript API (like 3D Maps and the Place Details UI Kit). Ensure your API loading script includes `v: "alpha"`.
+*   **Be Specific:** Clear, detailed prompts lead to better results. Mention desired APIs, features, and map types.
 *   **Iterate:** Don't expect perfection on the first try. Use errors and feedback to refine the generated code with the AI assistant.
 *   **Focus on Patterns:** The context file emphasizes modern JavaScript (async/await, modules) and specific GMP patterns. Stick to these when prompting.
-*   **Cost Control:** Remember that the context file guides the LLM to use `fields` (JS API) and `X-Goog-FieldMask` (fetch API) to minimize costs. Double-check these are present in the generated code if you modify it.
 *   **Security:** Always handle your API keys securely and apply the necessary restrictions in the Cloud Console.
-*   **No Comments:** The context explicitly tells the LLM *not* to add code comments to the final `index.html`. If you see comments, remind the LLM to remove them.

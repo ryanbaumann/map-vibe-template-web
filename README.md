@@ -1,4 +1,4 @@
-# Map Vibe Template - Web
+# Map Vibe Template for Web Applications
 
 ![GeoMob SF Presentation](./GeoMob%20SF%20Vibe%20with%20Maps%20Presentation%20-%20April%2015%202025%20-%20Ryan%20Baumann.pdf)
 

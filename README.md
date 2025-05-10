@@ -21,22 +21,12 @@ Before you start, you will need:
     *   Create a new project or select an existing one.
     *   Navigate to "APIs & Services" > "Credentials".
     *   Click on "Create credentials" and select "API key".
-    *   **Crucially, secure your API key!** This is vital to prevent unauthorized use and unexpected charges.
-        *   Refer to Google Cloud's documentation on [API key best practices](https://cloud.google.com/docs/authentication/api-keys-best-practices) for detailed instructions.
-        *   Apply **Application restrictions** (e.g., HTTP referrers for websites, limiting to `localhost` for development and your specific domain(s) for production).
-        *   Apply **API restrictions**. Click "Restrict key" and select the following APIs that should be enabled for the key:
-            *   Maps JavaScript API
-            *   Places API
-            *   Routes API
-            *   Geocoding API (often used implicitly by other services)
-            *   Directions API (consider enabling if Routes API doesn't cover all planned example use cases)
 2.  **A Map ID (for 2D Vector Maps):**
     *   In the Google Cloud Console, navigate to "Google Maps Platform" > "Map Management".
     *   Click "Create Map ID".
     *   Give your Map ID a descriptive name (e.g., "map-vibe-project-map").
     *   Select "JavaScript" as the map type/platform.
     *   Choose "Vector" as the map style.
-    *   Under "Advanced map features" (or similar wording), enable features like "Advanced Markers" and "Place Overview" to ensure compatibility with modern map functionalities demonstrated in this template.
     *   Click "Save" and then copy the generated Map ID.
     *   This Map ID is specifically used for 2D Vector maps and enables access to advanced features like custom styling and advanced markers. 3D Maps do not use a Map ID.
 
